@@ -22,10 +22,13 @@
 #include <linux/if_tun.h>
 #include <fcntl.h>
 
+#include <sys/shm.h> // shared memory
+#include <sys/msg.h> // message queue
 #include "FX_MAC.h"
 
 #include "../hdr/common/log_stdout.h"
 #include "../hdr/common/interfaces.h"
+#include "../hdr/upper/rlc_common.h"
 #include "../hdr/upper/rlc_um.h"
 #include "../hdr/mac/mux.h"
 #include "../hdr/mac/demux.h"

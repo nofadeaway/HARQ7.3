@@ -78,7 +78,120 @@ public:
 /**************************************************************************
 * rlc-class
 **************************************************************************/
+class rlc_um_toinit
+    : public pdcp_interface_rlc,
+      public rrc_interface_rlc
+{
+public:
+  rlc_um_toinit() { n_sdus = 0; }
 
+  // PDCP interface
+  void write_pdu(uint32_t lcid, byte_buffer_t *sdu)
+  {
+    assert(lcid == 3);
+    sdus[n_sdus++] = sdu;
+  }
+  void write_pdu_bcch_bch(byte_buffer_t *sdu) {}
+  void write_pdu_bcch_dlsch(byte_buffer_t *sdu) {}
+  void write_pdu_pcch(byte_buffer_t *sdu) {}
+
+  // RRC interface
+  void max_retx_attempted() {}
+
+  byte_buffer_t *sdus[5];
+  int n_sdus;
+};
+
+/////////////////
+class rlc_mac_link
+    : public rlc_interface_mac
+{
+public:
+  uint16_t rnti;
+  rlc_um *rlc;
+  uint32_t get_buffer_state(uint32_t lcid)
+  {
+    if (lcid == 3)
+    {
+      return rlc->get_buffer_state();
+    }
+    else
+      return 0;
+    //else{//lcid==4以及其他
+    //	return rlc4.get_buffer_state();
+    //}
+  }
+
+  uint32_t get_total_buffer_state(uint32_t lcid) {}
+
+  const static int MAX_PDU_SEGMENTS = 20;
+
+  /* MAC calls RLC to get RLC segment of nof_bytes length.
+   * Segmentation happens in this function. RLC PDU is stored in payload. */
+  int read_pdu(uint32_t lcid, uint8_t *payload, uint32_t nof_bytes)
+  {
+    int len;
+    if (lcid == 3)
+    {
+      len = rlc->read_pdu(payload, nof_bytes);
+    }
+    else
+      len = 0;
+    //else{//lcid==4以及其他
+    //len=rlc4.read_pdu(payload,nof_bytes);printf("HERE4444\n");
+    //}
+    return len;
+  }
+
+  /* MAC calls RLC to push an RLC PDU. This function is called from an independent MAC thread.
+	* PDU gets placed into the buffer and higher layer thread gets notified. */
+  void write_pdu(uint32_t lcid, uint8_t *payload, uint32_t nof_bytes)
+  {
+    if (lcid == 3)
+    {
+
+      rlc->write_pdu(payload, nof_bytes);
+    } //else{//lcid==4以及其他
+      //rlc4.write_pdu(payload,nof_bytes);printf("HERE4444\n");
+      //}
+  }
+  uint32_t n_unread()
+  {
+    return rlc->n_unread();
+  }
+  uint32_t n_unread_bytes()
+  {
+    return rlc->n_unread_bytes();
+  }
+};
+
+class rlc_mac_link_group
+{
+public:
+  rlc_mac_link N[20];
+  int32_t n_users;
+
+  void init()
+  {
+    n_users = 0;
+    for (int i = 0; i < 20; ++i)
+    {
+      N[i].rnti = 0;
+      N[i].rlc = NULL;
+    }
+  }
+  int set_link(uint16_t rnti_, rlc_um *rlc_)
+  {
+    if (n_users >= 20)
+      return -1;
+    N[n_users].rnti = rnti_;
+    N[n_users].rlc = rlc_;
+    n_users++;
+    return 0;
+  }
+};
+
+//**************************MAC*************//
 class UE_process_FX //处理之前的程序
 {
 public:
@@ -88,6 +201,7 @@ public:
   pthread_mutex_t busy_LOCK;
   pthread_cond_t busy_signal;
   uint32_t busy_num;
+  rlc_um *rlc_k;
   //mac_dummy_timers timers_test;
   mux ue_mux_test;
   demux mac_demux_test;
@@ -115,25 +229,25 @@ public:
     qbuff_flag = pdu_queue_test.pdu_q[pid_now].send(payload_back, pdu_sz_test); //把payload)back存入qbuff
     if (qbuff_flag)
     {
-      printf("RNTI:%d:::Succeed in sending PDU to queue's buffer!(PID:%d,rp is %d,wp is %d)\n", rnti,pid_now,pdu_queue_test.pdu_q[pid_now].rp_is(),pdu_queue_test.pdu_q[pid_now].wp_is());
+      printf("RNTI:%d:::Succeed in sending PDU to queue's buffer!(PID:%d,rp is %d,wp is %d)\n", rnti, pid_now, pdu_queue_test.pdu_q[pid_now].rp_is(), pdu_queue_test.pdu_q[pid_now].wp_is());
     }
     else
     {
-      printf("RNTI:%d:::Fail in sending PDU to queue's buffer!(PID:%d,rp is %d,wp is %d)\n", rnti,pid_now,pdu_queue_test.pdu_q[pid_now].rp_is(),pdu_queue_test.pdu_q[pid_now].wp_is());
+      printf("RNTI:%d:::Fail in sending PDU to queue's buffer!(PID:%d,rp is %d,wp is %d)\n", rnti, pid_now, pdu_queue_test.pdu_q[pid_now].rp_is(), pdu_queue_test.pdu_q[pid_now].wp_is());
     }
   }
 
   bool pdu_in(uint8_t *payload_back, uint32_t pdu_sz_test) // 将pdu存入为空闲状态的HARQ进程的队列，但只查找一次
   {
     pthread_mutex_lock(&busy_LOCK);
-    bool suc = false,flag = false;
+    bool suc = false, flag = false;
     static uint32_t pid_not_busy = 0;
     if (busy_num < HARQ_NUM) //有空闲的就存入空闲状态的
     {
       while (busy_index[pid_not_busy])
       {
         pid_not_busy = (pid_not_busy + 1) % HARQ_NUM;
-        flag =true;
+        flag = true;
       }
     }
     else //无空闲的随便存
@@ -144,8 +258,8 @@ public:
       suc = true;
     else
       suc = false;
-    if(flag)
-       pid_not_busy = 0;
+    if (flag)
+      pid_not_busy = 0;
     pthread_mutex_unlock(&busy_LOCK);
     return suc;
   }
@@ -187,7 +301,7 @@ public:
     //   printf("RNTI %d::: No PDU in queue!\n",rnti);
     //   return NULL;
     // }
-    printf("wp is %d\n",pdu_queue_test.pdu_q[pid_now].wp_is());
+    printf("wp is %d\n", pdu_queue_test.pdu_q[pid_now].wp_is());
     if (ACK_temp)
     {
       //payload_tosend = payload_back;
@@ -231,71 +345,62 @@ public:
     pdu_queue_test.init(callback_, log_h_);
     mac_demux_test.init(phy_h_, rlc_, log_h_);
   }
-  
+
   uint8_t *harq_busy(uint32_t *pid, uint32_t len) //用于物理层发送，发送一个不出于busy状态的harq进程的pdu
   {
     pthread_mutex_lock(&busy_LOCK);
-    uint8_t *pay_load=NULL;
+    uint8_t *pay_load = NULL;
     while (busy_num >= HARQ_NUM)
     {
       pthread_cond_wait(&busy_signal, &busy_LOCK);
     }
     uint32_t pid_not_busy = 0;
-    while (busy_index[pid_not_busy]||pdu_queue_test.pdu_q[pid_not_busy].isempty())    //寻找一个即不处于繁忙状态，也非空的harq进程号
+    while (busy_index[pid_not_busy] || pdu_queue_test.pdu_q[pid_not_busy].isempty()) //寻找一个即不处于繁忙状态，也非空的harq进程号
     {
       pid_not_busy = (pid_not_busy + 1) % HARQ_NUM;
     }
     busy_index[pid_not_busy] = true;
     busy_num++;
     *pid = pid_not_busy;
-    pay_load=trans_control(pid_not_busy,len);
+    pay_load = trans_control(pid_not_busy, len);
     pthread_mutex_unlock(&busy_LOCK);
     return pay_load;
   }
 };
 
+//申请共享内存
+
+//int shared_memory(key_t key, )
+
+//调度器
+
+struct schedule_information
+{
+  uint16_t rnti;
+  uint32_t unread;      //需要发送给该用户的ip包个数
+  uint32_t payloadsize; //rlc包大小
+};
+struct schedule_input
+{                                          //传入调度器的数据结构
+  uint32_t num_user;                       //当前数据的目的UE的个数
+  std::vector<schedule_information> vec_u; //存储对应UE的rlc队列的相关信息，vector大小等于num_user
+};
+
 class UE_FX //日后用于多用户情况
 {
 public:
+  uint32_t nof_users; //用户数
+  rlc_mac_link_group *rlc_all;
   std::map<uint16_t, UE_process_FX> UE;
-};
-
-/*********    RLC测试      **********/
-class RLC_interface_FX
-{
-private:
-  //std::map<uint16_t, uint32_t> unread_list;
-  uint32_t n_unread;
-  uint32_t idx;
-  uint16_t rnti[SIZE_RLC_QUEUE];
-  rlc_um *rlc;
-
-public:
-  void init(rlc_um *rlc_)
+  schedule_information rlc_scan[20];
+  void schedule_rlc_scan() //扫描rlc队列
   {
-    rlc = rlc_;
-    idx = 0;
-    n_unread = 0;
-  }
-  bool set(uint16_t i_rnti)
-  {
-    if (n_unread != SIZE_RLC_QUEUE)
+    nof_users = rlc_all->n_users;
+    for (int i = 0; i < nof_users; ++i)
     {
-      rnti[idx] = i_rnti;
-      idx = (idx + 1) % SIZE_RLC_QUEUE;
-      ++n_unread;
-      return true;
-    }
-    else
-    {
-      return false;
-    }
-  }
-  int had_to_mac()
-  {
-    if (n_unread > 0)
-    {
-      return (--n_unread);
+      rlc_scan[i].rnti = rlc_all->N[i].rnti;
+      rlc_scan[i].unread = rlc_all->N[i].n_unread();
+      rlc_scan[i].payloadsize = rlc_all->N[i].n_unread_bytes();
     }
   }
 };

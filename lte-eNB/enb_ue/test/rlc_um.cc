@@ -130,6 +130,10 @@ uint32_t rlc_um::n_unread()
 {
   return tx_sdu_queue.size();
 }
+uint32_t rlc_um::n_unread_bytes()
+{
+  return tx_sdu_queue.size_bytes();
+}
 /****************************************************************************
  * PDCP interface
  ***************************************************************************/
