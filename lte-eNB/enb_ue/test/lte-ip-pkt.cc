@@ -72,10 +72,10 @@ void *lte_send_ip_3(void *ptr)
 		//usleep(1000); //linux下 \sleep(),里面变量单位是秒
 		k++;
 
-		i++;
-		if(i>3)
-		{
-			i=0;
-		}
+		// i++;
+		// if(i>3)
+		// {
+		// 	i=0;
+		// }
 	}
 }

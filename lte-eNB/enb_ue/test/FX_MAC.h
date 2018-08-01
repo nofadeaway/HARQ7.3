@@ -9,6 +9,8 @@
 #define SEND_SIZE 400
 #define HARQ_NUM 8
 #define SIZE_RLC_QUEUE 24
+#define MAX_USERS 20
+#define NUM_SUBFRAME 10
 
 #include <string.h>
 #include <strings.h>
@@ -168,13 +170,13 @@ public:
 class rlc_mac_link_group
 {
 public:
-  rlc_mac_link N[20];
+  rlc_mac_link N[MAX_USERS];
   int32_t n_users;
 
   void init()
   {
     n_users = 0;
-    for (int i = 0; i < 20; ++i)
+    for (int i = 0; i < MAX_USERS; ++i)
     {
       N[i].rnti = 0;
       N[i].rlc = NULL;
@@ -182,7 +184,7 @@ public:
   }
   int set_link(uint16_t rnti_, rlc_um *rlc_)
   {
-    if (n_users >= 20)
+    if (n_users >= MAX_USERS)
       return -1;
     N[n_users].rnti = rnti_;
     N[n_users].rlc = rlc_;
@@ -192,10 +194,18 @@ public:
 };
 
 //**************************MAC*************//
+
+struct ack_time_imply_map
+{
+  bool valid;
+  uint32_t sub_past; //之前发送的子帧号
+  uint32_t harq_pid;
+  uint32_t ack_come; //ACK来到时的子帧号
+};
+
 class UE_process_FX //处理之前的程序
 {
 public:
-  //rlc_um_tester_3 i_rlc3;
   uint16_t rnti;
   pthread_mutex_t ACK_LOCK;
   pthread_mutex_t busy_LOCK;
@@ -210,6 +220,28 @@ public:
   bool ACK[HARQ_NUM] = {false, false, false, false, false, false, false, false};
   bool ACK_default[HARQ_NUM] = {false, false, false, false, false, false, false, false};
   bool busy_index[HARQ_NUM] = {false, false, false, false, false, false, false, false};
+
+  ack_time_imply_map ack_map[NUM_SUBFRAME] = {}; //TDD的ACK时序关系映射
+
+  int set_ack_map(uint32_t type = 3) //设置TDD的ACK映射，现在所用为LTE的TDD configuration 3
+  {
+    //return set_ack_time(type);
+    ack_map[0] = {false, 0, 0, 4}; //0号下行子帧的ACK在4号上行子帧
+    ack_map[1] = {false, 1, 0, 2}; //1号切换子帧的ACK在下一个帧中2好子帧回复,因为这个要到下一个帧中，另外做一个处理
+    ack_map[2] = {false, 2, 0, 8}; //2号上行子帧数据的ACK在下行子帧8号回复
+    ack_map[3] = {false, 3, 0, 9}; //3号上行子帧数据的ACK在下行子帧9号回复
+    ack_map[4] = {false, 4, 0, 0}; //4号上行子帧数据的ACK在下行子帧0号回复
+    ack_map[5] = {false, 5, 0, 2}; //5号上行子帧数据的ACK在下行子帧2号回复
+    ack_map[6] = {false, 6, 0, 2}; //6号上行子帧数据的ACK在下行子帧2号回复
+    ack_map[7] = {false, 7, 0, 3}; //7号上行子帧数据的ACK在下行子帧3号回复
+    ack_map[8] = {false, 8, 0, 3}; //8号上行子帧数据的ACK在下行子帧3号回复
+    ack_map[9] = {false, 9, 0, 4}; //9号上行子帧数据的ACK在下行子帧4号回复
+  }
+
+  // int set_ack_time(uint32_t type)
+  // {
+  //   //...........以后添加多种配置
+  // }
 
   void *pdu_store(uint32_t pid_now, uint8_t *payload_back, uint32_t pdu_sz_test)
   {
@@ -270,7 +302,7 @@ public:
     busy_num--;
     pthread_mutex_unlock(&busy_LOCK);
   }
-  void ack_recv(uint32_t pid)
+  void ack_recv(uint32_t pid)     //PID的ACK回复被接受到，从忙状态变为空闲，但ACK的赋值操作此函数没有做
   {
     pthread_mutex_lock(&busy_LOCK);
     busy_index[pid] = false;
@@ -344,6 +376,7 @@ public:
     ue_mux_test.init(rlc_, log_h_, bsr_procedure_, phr_procedure_);
     pdu_queue_test.init(callback_, log_h_);
     mac_demux_test.init(phy_h_, rlc_, log_h_);
+    set_ack_map();
   }
 
   uint8_t *harq_busy(uint32_t *pid, uint32_t len) //用于物理层发送，发送一个不出于busy状态的harq进程的pdu
@@ -365,6 +398,51 @@ public:
     pay_load = trans_control(pid_not_busy, len);
     pthread_mutex_unlock(&busy_LOCK);
     return pay_load;
+  }
+
+  int set_ack_wait(uint32_t pid, uint32_t subframe_now) //发送端使用的函数，设置此发送的子帧所发送的PID号，以在收到ACK后完成映射
+  {
+    ack_map[subframe_now].harq_pid = pid;
+    ack_map[subframe_now].valid = true;
+  }
+
+  int set_ack_come(uint32_t subframe_now) //通过映射表，找出当前这个子帧收到的ACK对应前面哪个子帧
+  {
+    int flag = -1;
+    for (int i = 0; i < NUM_SUBFRAME; ++i)
+    {
+      if (ack_map[i].ack_come == subframe_now)
+      {
+        if (ack_map[i].valid)
+        {
+          ack_recv(ack_map[i].harq_pid);
+          ack_map[i].valid = false;
+          flag =1;
+        }
+      }
+    }
+    return flag;
+  }
+
+   int set_ack_come(uint32_t subframe_now,bool ack_) //通过映射表，找出当前这个子帧收到的ACK对应前面哪个子帧
+  {
+    pthread_mutex_lock(&ACK_LOCK);
+    int flag = -1;
+    for (int i = 0; i < NUM_SUBFRAME; ++i)
+    {
+      if (ack_map[i].ack_come == subframe_now)
+      {
+        if (ack_map[i].valid)
+        {
+          ack_recv(ack_map[i].harq_pid);
+          ack_map[i].valid = false;
+          ACK[ack_map[i].harq_pid] = ack_;
+          flag =1;
+        }
+      }
+    }
+    pthread_mutex_unlock(&ACK_LOCK);
+    return flag;
   }
 };
 
@@ -392,7 +470,57 @@ public:
   uint32_t nof_users; //用户数
   rlc_mac_link_group *rlc_all;
   std::map<uint16_t, UE_process_FX> UE;
-  schedule_information rlc_scan[20];
+  schedule_information rlc_scan[MAX_USERS];
+  uint32_t subframe_number;
+
+  void init()
+  {
+    nof_users = 0;
+    for (int i = 0; i < MAX_USERS; ++i)
+    {
+      rlc_scan[i] = {};
+    }
+    rlc_all = NULL;
+    subframe_number = 0;
+  }
+
+  int set_subframe(uint32_t set_) //设置子帧号
+  {
+    boost::mutex::scoped_lock lock(mutex);
+
+    subframe_number = set_;
+  }
+
+  uint32_t subframe_now() //获取当前子帧号
+  {
+    boost::mutex::scoped_lock lock(mutex);
+
+    return subframe_number;
+  }
+
+  int subframe_end()  //当前子帧结束，子帧号+1
+  {
+    boost::mutex::scoped_lock lock(mutex);
+    subframe_number = (subframe_number +1)%NUM_SUBFRAME;
+  }
+
+  int subframe_process_now() //告知调用此函数者，当前子帧属性，上行/下行/切换
+  {
+    boost::mutex::scoped_lock lock(mutex);
+    if (subframe_number >= 10) //有效子帧号为0到9
+      return -1;
+    else if ((subframe_number == 0) || (subframe_number > 4)) // 0,5到9 为下行帧
+    {
+      return 1;
+    }
+    else if (subframe_number != 1) //1号子帧为切换帧
+    {
+      return 2;
+    }
+    else
+      return 0;
+  }
+
   void schedule_rlc_scan() //扫描rlc队列
   {
     nof_users = rlc_all->n_users;
@@ -403,5 +531,26 @@ public:
       rlc_scan[i].payloadsize = rlc_all->N[i].n_unread_bytes();
     }
   }
+
+  void schedule_request()
+  {
+    //调度算法的实现
+  }
+  uint32_t schedule_request(uint16_t rnti_)
+  {
+    for (int i = 0; i < MAX_USERS; ++i)
+    {
+      if (rlc_scan[i].rnti == rnti_)
+      {
+        printf("RNTI:%d:::unread is %d, unread_bytes is %d.\n", rlc_scan[i].rnti, rlc_scan[i].unread, rlc_scan[i].payloadsize);
+        return rlc_scan[i].unread;
+      }
+    }
+    printf("No this rnti!\n");
+    return 0;
+  }
+
+private:
+  boost::mutex mutex;
 };
 #endif

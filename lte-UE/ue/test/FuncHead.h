@@ -22,10 +22,13 @@
 #include <linux/if_tun.h>
 #include <fcntl.h>
 
+#include <sys/shm.h> // shared memory
+#include <sys/msg.h> // message queue
 #include "FX_MAC.h"
 
 #include "../hdr/common/log_stdout.h"
 #include "../hdr/common/interfaces.h"
+#include "../hdr/upper/rlc_common.h"
 #include "../hdr/upper/rlc_um.h"
 #include "../hdr/mac/mux.h"
 #include "../hdr/mac/demux.h"
@@ -51,14 +54,14 @@ private:
 	srslte::timers::timer t;
 };
 void* lte_send_ip_3(void *ptr);
-void* lte_rece(void *ptr);
-void* lte_send_udp(void *ptr);
+//void* lte_rece(void *ptr);
+bool  lte_rece(void *ptr);
+//void* lte_send_udp(void *ptr);
+bool lte_send_udp(void *ptr);
 int cwrite(int, uint8_t *, int);
 int tun_alloc(char *, int);
 
-//uint8_t* trans_control(uint32_t pid_now);   //FX：选择哪一个HARQ进程用于UDP发送
-//uint8_t* trans_control(uint32_t pid_now,uint32_t len,int port_add);
-//void* pdu_store(uint32_t pid_now,uint8_t* payload_back,uint32_t pdu_sz_test);
+void *lte_send_recv(void *ptr);
 
 struct D_DCI
 {

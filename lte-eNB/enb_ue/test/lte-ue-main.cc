@@ -38,24 +38,12 @@ int thread_create(int user_n)
 	for (int i = 0; i < user_n; ++i)
 	{
 		temp_in[c_p_now] = i;
-		if ((temp = pthread_create(&id[c_p_now], NULL, lte_send_udp, (void *)&(temp_in[c_p_now])) != 0)) //send-udp
+		if ((temp = pthread_create(&id[c_p_now], NULL, lte_send_recv, (void *)&(temp_in[c_p_now])) != 0)) //send-udp
 			printf("Thread 2 lte_send_udp fail to create!\n");
 		else
 		{
 			++c_p_now;
 			printf("Dest:UE No.%d:Thread 2 lte_send_udp created! Now number of pthreads are %d!\n", i, c_p_now);
-		}
-	}
-	//printf("666");
-	for (int i = 0; i < user_n; ++i)
-	{
-		temp_in[c_p_now] = i;
-		if ((temp = pthread_create(&id[c_p_now], NULL, lte_rece, (void *)&(temp_in[c_p_now])) != 0))
-			printf("Thread 3 lte_rece fail to create!\n");
-		else
-		{
-			++c_p_now;
-			printf("UE No.%d:Thread 3 lte_rece created! Now number of pthreads are %d!\n", i, c_p_now);
 		}
 	}
 	return c_p_now;
@@ -136,12 +124,13 @@ int main(void)
 	phr_proc phr_test;
 	pdu_queue::process_callback *callback_test; //
 	callback_test = &mac_demux_test_trans;		// 5.23
-
+    
+	ue_test.init();
 	rlc_test_g.init();
 	
-    uint16_t user_n = 4;
+    uint16_t user_n = 1;
 	int err = -1;											  //用户数目
-	unsigned int count_barrier = user_n * 2 + 1, pth_now = 0; //用户数为n,n个udp,n个recv,1个ip-pkt,1个main,NONONO,主线程不需要等待
+	unsigned int count_barrier = user_n + 1, pth_now = 0; //用户数为n,n个udp,n个recv,1个ip-pkt,1个main,NONONO,主线程不需要等待
 
 	for (uint16_t i = 0; i < user_n; ++i)
 	{

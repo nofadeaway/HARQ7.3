@@ -14,7 +14,7 @@ extern pthread_barrier_t barrier;
 * ipsend:从tun中读数据并压入队列
 **************************************************************************/
 
-void *lte_rece(void *ptr)
+bool lte_rece(void *ptr)
 {
 
 	int port_add = 0;
@@ -53,7 +53,7 @@ void *lte_rece(void *ptr)
 	struct sockaddr_in client_addr;
 	socklen_t addrlen = sizeof(client_addr);
 
-	uint32_t rece_size = 300, k = 0;
+	uint32_t rece_size = 1500, k = 0;
 	; //修改为随机啊！！！！！！！！！！！
 	uint8_t *rece_payload = new uint8_t[10240];
 	/**********************************/
@@ -107,17 +107,19 @@ void *lte_rece(void *ptr)
 	uint8_t *temp_0;
 	uint32_t re_size = 0;
 	/********************************/
-	pthread_barrier_wait(&barrier);
+	uint32_t subframe_now = 0;
 
-	while (1)
+	char temp_DCI[100];
+	D_DCI dci;
+
+	subframe_now = ue_test.subframe_now();
+	//作用把内存清零
+	memset(&client_addr, 0, sizeof(client_addr)); //void *memset(void *s, int ch, size_t n);将s中当前位置后面的n个字节 （typedef unsigned int size_t ）用 ch 替换并返回 s
+	memset(&addr_DCI_1, 0, sizeof(addr_DCI_1));
+	memset(rece_payload, 0, 10240);
+
+	if ((subframe_now == 0) || (subframe_now > 4)) //是一个下行帧，则接收数据
 	{
-
-		
-
-		//作用把内存清零
-		memset(&client_addr, 0, sizeof(client_addr)); //void *memset(void *s, int ch, size_t n);将s中当前位置后面的n个字节 （typedef unsigned int size_t ）用 ch 替换并返回 s
-		memset(&addr_DCI_1, 0, sizeof(addr_DCI_1));
-		memset(rece_payload,0,10240);
 		//接受DCI
 		char temp_DCI[100];
 		D_DCI dci;
@@ -149,45 +151,46 @@ void *lte_rece(void *ptr)
 			if (ue_test.UE[rnti].mac_demux_test.pdus.pdu_q[dci.N_pid_now].send(rece_payload, rece_size))
 			{
 				printf("OK!\n");
-				if ((temp_0 = (uint8_t*) ue_test.UE[rnti].mac_demux_test.pdus.pdu_q[dci.N_pid_now].pop(&re_size)))
+				if ((temp_0 = (uint8_t *)ue_test.UE[rnti].mac_demux_test.pdus.pdu_q[dci.N_pid_now].pop(&re_size)))
 				{
 					ue_test.UE[rnti].mac_demux_test.process_pdu(temp_0, re_size);
 					ue_test.UE[rnti].mac_demux_test.pdus.pdu_q[dci.N_pid_now].release();
 				}
 			}
-
-			//}
-
-			//FX   发送ACK
-			char temp[100];
-			A_ACK ack_reply;
-			ack_reply.ACK_pid = dci.N_pid_now;
-			ack_reply.ack_0 = true;
-			if (k % 3 == 0)
-			{
-				ack_reply.ack_0 = false;
-			}
-			memset(temp, 0, sizeof(temp));
-			memcpy(temp, &ack_reply, sizeof(ack_reply));
-			if (sendto(st_a, temp, sizeof(ack_reply), 0, (struct sockaddr *)&addr_a, sizeof(addr_a)) == -1)
-			{
-				printf("RNTI:%d:::: ACK:sendto failed ! error message :%s\n", rnti, strerror(errno));
-			}
-			else
-			{
-				printf("(RNTI:%d:::): NO.%d:ACK sending succeed!\n", rnti, ack_reply.ACK_pid);
-				printf("************************************\n");
-			}
-			//end
-
-			//while(!timers_test.get(-1)->is_expired()){ timers_test.get(-1)->step();}
 		}
+	}
+	else
+	{
+		//}
 
-	
+		//FX   发送ACK
+		char temp[100];
+		A_ACK ack_reply;
+		ack_reply.ACK_pid = 0;
+		ack_reply.ack_0 = true;
+		// if (k % 3 == 0)
+		// {
+		// 	ack_reply.ack_0 = false;
+		// }
+		memset(temp, 0, sizeof(temp));
+		memcpy(temp, &ack_reply, sizeof(ack_reply));
+		if (sendto(st_a, temp, sizeof(ack_reply), 0, (struct sockaddr *)&addr_a, sizeof(addr_a)) == -1)
+		{
+			printf("RNTI:%d:::: ACK:sendto failed ! error message :%s\n", rnti, strerror(errno));
+		}
+		else
+		{
+			printf("(RNTI:%d:::): NO.%d:ACK sending succeed!\n", rnti, ack_reply.ACK_pid);
+			printf("************************************\n");
+		}
+		//end
+
+		//while(!timers_test.get(-1)->is_expired()){ timers_test.get(-1)->step();}
 	}
 
 END:
 	delete[] rece_payload;
 	close(st);
 	close(st_a);
+	close(st_DCI);
 }

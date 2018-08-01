@@ -33,6 +33,7 @@
 #include "common/interfaces.h"
 #include "common/msg_queue.h"
 #include "upper/rlc_common.h"
+#include "rlc_common.h"
 #include <boost/thread/mutex.hpp>
 #include <map>
 #include <queue>
@@ -65,7 +66,7 @@ public:
   
   //FX
   uint32_t n_unread();
-
+  uint32_t n_unread_bytes();
   // PDCP interface
   void write_sdu(srslte::byte_buffer_t *sdu);
 

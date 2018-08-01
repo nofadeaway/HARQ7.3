@@ -21,7 +21,7 @@ extern rlc_um rlc_test[];
 extern UE_FX ue_test; //map容器
 
 
-void *lte_send_udp(void *ptr)
+bool lte_send_udp(void *ptr)
 {
 
 	int port_add = 0; //FX:7.10

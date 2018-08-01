@@ -112,15 +112,10 @@ void mux::pusch_retx(uint32_t tx_tti, uint32_t pid)
   }
 }
 
-uint8_t* mux::pdu_get(uint8_t *payload, uint32_t pdu_sz)
-{
-    return mux::pdu_get(payload,pdu_sz, 1, 0);
-}
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Multiplexing and logical channel priorization as defined in Section 5.4.3
 uint8_t* mux::pdu_get(uint8_t *payload, uint32_t pdu_sz, uint32_t tx_tti, uint32_t pid)
 {	
-  printf("\n\n");
   printf("---------------------------------------\n");
   printf("------------start_pdu_get--------------\n");
   

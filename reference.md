@@ -140,3 +140,13 @@ demux::push_pdu ->> pdus.push() (pdu_queue.cc) ->> pdu_q[pid].push(nof_bytes) �
 发现了No ptr的原因，因为qbuff满了，而满了的原因是，本身是 存入一个， ack为true就释放一个；当需要重发时，无法释放，就队列里的pdu数目就会变多
 uint8_t *busy_harq(); 还得考虑队列里是否为空     目前没有考虑全空情况，因为以后会是调度器来调度
 甚至连pdu_in都得考虑队列是否满了的问题
+
+
+8.1
+    默认参数的情况，默认参数的赋值，算上声明和定义，只能1次
+例如：
+    int kkk(int a, int b =5);
+    int kkk(int a, int b =5)     //这是错误的，这里只能 int kkk(int a ,int b){   ......   }
+    {
+        ........
+    }

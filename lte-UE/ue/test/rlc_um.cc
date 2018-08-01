@@ -130,6 +130,10 @@ uint32_t rlc_um::n_unread()
 {
   return tx_sdu_queue.size();
 }
+uint32_t rlc_um::n_unread_bytes()
+{
+  return tx_sdu_queue.size_bytes();
+}
 /****************************************************************************
  * PDCP interface
  ***************************************************************************/
@@ -433,7 +437,7 @@ void rlc_um::reassemble_rx_sdus()
 
           //pdcp->write_pdu(lcid, rx_sdu);
 //pthread_mutex_lock(&mut);//lock
-	//cwrite(tun_fd, rx_sdu->msg, rx_sdu->N_bytes); //brother yushan 7.23 
+	cwrite(tun_fd, rx_sdu->msg, rx_sdu->N_bytes);
 //pthread_mutex_unlock(&mut);//lock
 	printf("write into tun \n");
 
@@ -459,7 +463,7 @@ void rlc_um::reassemble_rx_sdus()
 
           //pdcp->write_pdu(lcid, rx_sdu);
 //pthread_mutex_lock(&mut);//lock
-	//cwrite(tun_fd, rx_sdu->msg, rx_sdu->N_bytes);
+	cwrite(tun_fd, rx_sdu->msg, rx_sdu->N_bytes);
 //pthread_mutex_unlock(&mut);//lock
 	
 	printf("write the last into tun!\n");
@@ -500,7 +504,7 @@ void rlc_um::reassemble_rx_sdus()
 
         //pdcp->write_pdu(lcid, rx_sdu);
 //pthread_mutex_lock(&mut);//lock
-	//cwrite(tun_fd, rx_sdu->msg, rx_sdu->N_bytes);
+	cwrite(tun_fd, rx_sdu->msg, rx_sdu->N_bytes);
 //pthread_mutex_unlock(&mut);//lock
 	printf("write new into tun \n");
         rx_sdu = pool->allocate();
@@ -525,7 +529,7 @@ void rlc_um::reassemble_rx_sdus()
 
         //pdcp->write_pdu(lcid, rx_sdu);
 //pthread_mutex_lock(&mut);//lock
-//	cwrite(tun_fd, rx_sdu->msg, rx_sdu->N_bytes);
+	cwrite(tun_fd, rx_sdu->msg, rx_sdu->N_bytes);
 //pthread_mutex_unlock(&mut);//lock
 printf("write the last into tun \n");
 

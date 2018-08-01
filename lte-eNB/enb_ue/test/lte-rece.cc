@@ -13,7 +13,7 @@ extern mac_dummy_timers timers_test;
 //extern eNB_ACK I_ACK[];
 
 //extern UE_process_FX fx_mac_test;
-extern UE_FX ue_test;    //map容器
+extern UE_FX ue_test; //map容器
 
 // struct A_ACK
 // {
@@ -27,7 +27,7 @@ extern pthread_barrier_t barrier;
 * ipsend:从tun中读数据并压入队列
 **************************************************************************/
 
-void *lte_rece(void *ptr)
+bool lte_rece(void *ptr)
 {
 
 	int port_add = 0;
@@ -40,7 +40,7 @@ void *lte_rece(void *ptr)
 	{
 		printf("Recv:No port offset inport.\n");
 	}
-    
+
 	uint16_t rnti = port_add;
 	//printf("enter--lte_rece\n");
 
@@ -51,7 +51,7 @@ void *lte_rece(void *ptr)
 		exit(1);
 	}
 	int port = atoi("8808"); //接受数据的端口
-    port = port +port_add;
+	port = port + port_add;
 	struct sockaddr_in addr;
 
 	addr.sin_family = AF_INET;
@@ -94,66 +94,29 @@ void *lte_rece(void *ptr)
 		exit(1);
 	}
 
+	uint32_t subframe_now = 0;
+	subframe_now = ue_test.subframe_now();
+
 	/****************************/
-	pthread_barrier_wait(&barrier);
+	//FX   接受ACK
+	char temp[100];
+	A_ACK ack_reply;
+	//ack_reply.ack_0=true;
+	memset(temp, 0, sizeof(temp));
 
-	while (1)
+	if (recv(st_a, temp, sizeof(ack_reply), 0) == -1)
 	{
-
-		if (k == 1000)
-		{
-			k = 0;
-		}
-
-		//作用把内存清零
-		// memset(&client_addr, 0, sizeof(client_addr));   //void *memset(void *s, int ch, size_t n);将s中当前位置后面的n个字节 （typedef unsigned int size_t ）用 ch 替换并返回 s
-
-		// if (recvfrom(st, rece_payload[k], rece_size, 0, (struct sockaddr *)&client_addr, &addrlen) == -1) {
-
-		// 	printf("recvfrom failed ! error message : %s\n", strerror(errno));
-		// 	goto END;
-		// }
-		// else {
-		// 	//MAC->RLC->IP 第二个参数有误,先固定与接收端一致,但是貌似不影响解包,丢弃了
-		// 	mac_demux_test.process_pdu(rece_payload[k], rece_size);
-		// 	while(!timers_test.get(-1)->is_expired()){ timers_test.get(-1)->step();}
-		// }
-
-		//FX   接受ACK
-		char temp[100];
-		A_ACK ack_reply;
-		//ack_reply.ack_0=true;
-		memset(temp, 0, sizeof(temp));
-
-		if (recv(st_a, temp, sizeof(ack_reply), 0) == -1)
-		{
-			printf("ACK:recvfrom failed ! error message : %s\n", strerror(errno));
-		}
-		else
-		{
-			memcpy(&ack_reply, temp, sizeof(ack_reply));
-			if (pthread_mutex_lock(&ue_test.UE[rnti].ACK_LOCK) != 0)
-			{
-				printf("RECE:Lock failed!\n");
-			}
-			ue_test.UE[rnti].ack_recv(ack_reply.ACK_pid);
-			ue_test.UE[rnti].ACK[ack_reply.ACK_pid] = ack_reply.ack_0;
-			pthread_mutex_unlock(&ue_test.UE[rnti].ACK_LOCK);
-			char str1[10] = "true", str2[10] = "false";
-			printf("/******lte-Recv:");
-			printf("RNTI:%d::: No.%d ACK received is %s\n",rnti, ack_reply.ACK_pid, (ack_reply.ack_0) ? str1 : str2);
-			// if(ack_reply.ack_0==true)
-			// {
-			// 	ACK[0]=ack_reply.ack_0;
-			// 	ACK[1]=ack_reply.ack_0;
-			// }
-		}
-		//
-		k++;
+		printf("ACK:recvfrom failed ! error message : %s\n", strerror(errno));
+	}
+	else
+	{
+		memcpy(&ack_reply, temp, sizeof(ack_reply));
+		ue_test.UE[rnti].set_ack_come(subframe_now, ack_reply.ack_0);
+		char str1[10] = "true", str2[10] = "false";
+		printf("/******lte-Recv:");
+		printf("RNTI:%d::: No.%d ACK received is %s\n", rnti, ack_reply.ACK_pid, (ack_reply.ack_0) ? str1 : str2);
 	}
 
-END:
 	close(st);
-ENDD:
 	close(st_a);
 }
